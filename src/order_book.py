@@ -65,7 +65,8 @@ class order_book:
                     self.remove_order(ctrparty_order)
                     continue
                 fill_qty = min(qty, ctrparty_qty)
-                ctrparty_qty -= qty
+                qty -= fill_qty
+                ctrparty_qty -= fill_qty
                 ctrparty_position = self.accounts[ctrparty_order[1]][self.contractID]
                 ctrparty_position.fill_order(
                     ctrparty_price, ctrparty_side, ctrparty_price, fill_qty
@@ -73,9 +74,18 @@ class order_book:
                 if not ctrparty_qty:
                     self.remove_order(ctrparty_order, order_filled=True)
                     continue
+                ctrparty_order[6] = ctrparty_qty
 
-            new_order = [self._master.eventID, mpid, self.contractID, price, side, qty]
-            new_order_id = acct_free_orders[-1]
+            if qty:
+                new_order = [
+                    self._master.eventID,
+                    mpid,
+                    self.contractID,
+                    price,
+                    side,
+                    qty,
+                ]
+                new_order_id = acct_free_orders[-1]
 
     def remove_order(self, order, order_filled=False, ignore_book=False):
         order_id, order_mpid, order_price, order_side, order_qty = (

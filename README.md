@@ -1,4 +1,3 @@
-# MiloFriendlyMatcha
-An event contract trading engine designed for educational use.  
-Features a dynamic position-based margining engine for futures-like automatic position and order management.  
-Readable version of Nash.
+# Nash-II
+# Formal work on Nash-II has **not** started.
+Nash-II is the planned second iteration of the Nash Event Contracts Exchange  

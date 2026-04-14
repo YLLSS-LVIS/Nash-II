@@ -3,8 +3,10 @@ from sortedcontainers import SortedDict
 # this is a test commit
 
 
-class position:
-    def __init__(self, margin_function, position, balance):
+class contract_manager:
+    def __init__(self, _account, margin_function, position, balance):
+        self.account = _account
+
         self.balance = balance
         self.position = position
         self.reducible = position[:]

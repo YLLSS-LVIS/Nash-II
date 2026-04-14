@@ -1,107 +1,82 @@
-from sortedcontainers import SortedList
+from sortedcontainers import SortedDict
 
-from main import main
-from position import position
-
-# List-based representation of an order
-# [timestamp, orderID, userID, contractID, price, side, qty]
+from contract_manager import contract_manager
+from orders import orders
 
 
 class order_book:
-    def __init__(self, _master: main, contract_information):
-        self._master = _master
-
-        self.contractID = int(contract_information["contract_id"])
-        self.maxSettlement = contract_information["max_settlement"]
-        self.marginFunction = [lambda x: x, lambda x: self.maxSettlement - x]
-
+    def __init__(self, _master, contract_id, max_settlement):
         self.accounts = _master.accounts
+        self.orders: orders = _master.orders
+        self.maxSettlement = int(max_settlement)
+        self.margin_function = [lambda x: x, lambda x: self.maxSettlement - x]
 
-        self.book = [
-            SortedList(key=lambda order: (-order[3], order[1])),
-            SortedList(key=lambda order: (order[3], order[1])),
-        ]
+        self.contractID = int(contract_id)
+        self.books = [SortedDict(), SortedDict()]
+        self.topOfBook = [None, None]
 
-    def add_order(self, mpid, price, side, qty):
-        if price < 1 or price >= self.maxSettlement or qty < 1 or (side not in [0, 1]):
-            return False
+        self.contractManagers = {
+            mpid: contract_manager(
+                margin_function=self.margin_function,
+                position=account.positions[self.contractID],
+                balance=account.balance,
+            )
+            for mpid, account in self.accounts.values()
+            if self.contractID in account.positions
+        }
 
-        acct = self.accounts[mpid]
-        acct_free_orders = acct.freeOrders
-        if not len(acct.freeOrders):
-            return False
-        acct_positions = acct.positions
-        new_position = self.contractID not in acct.positions
+        self.orderMPID = self.orders.mpid
+        self.orderContract = self.orders.contract
+        self.orderPrice = self.orders.price
+        self.orderSide = self.orders.side
+        self.orderQuantity = self.orders.quantity
+        self.orderHead = self.orders.head
+        self.orderTail = self.orders.tail
+        self.orderUsed = self.orders.used
+
+    def instantiate(self, contract_order_IDs: list):
+        # contract_order_IDs is a list of existing alive orders which are related to the contract
+        # this fuction does not have to be called if the system does not have an existing state to load (first boot)
+        pass
+
+    def post_order(self, mpid, price, side, qty):
+        account_contract_manager = self.positions.get(mpid)
+        new_position = account_position is None
         if new_position:
-            contract_pos = position(
-                margin_function=self.marginFunction,
-                balance=acct.balance,
-                position=[0, 0],
-            )
-        else:
-            contract_pos = acct_positions[self.contractID]
+            account = self.accounts.get(mpid)
+            if account is None:
+                return False, "The account does not exist"
 
-        if contract_pos.add_order(price=price, side=side, qty=qty):
-            ctrparty_side = 1 - side
-            ctrparty_book = self.book[ctrparty_side]
-            can_fill = (
-                (lambda maker_price: price >= maker_price)
-                if side == 0
-                else (lambda maker_price: maker_price >= price)
+            account_position = [0, 0]
+            account_contract_manager = contract_manager(
+                _account=account,
+                margin_function=self.margin_function,
+                position=account_position,
+                balance=account.balance,
             )
 
-            while True:
-                if (not len(ctrparty_book)) or (not qty):
-                    break
-                ctrparty_order = ctrparty_book[0]
-                ctrparty_mpid, ctrparty_price, ctrparty_qty = (
-                    ctrparty_order[2],
-                    ctrparty_order[4],
-                    ctrparty_order[6],
-                )
-                if not can_fill(ctrparty_price):
-                    break
-                if mpid == ctrparty_mpid:
-                    self.remove_order(ctrparty_order)
-                    continue
-                fill_qty = min(qty, ctrparty_qty)
-                qty -= fill_qty
-                ctrparty_qty -= fill_qty
-                ctrparty_position = self.accounts[ctrparty_order[1]][self.contractID]
-                ctrparty_position.fill_order(
-                    ctrparty_price, ctrparty_side, ctrparty_price, fill_qty
-                )
-                if not ctrparty_qty:
-                    self.remove_order(ctrparty_order, order_filled=True)
-                    continue
-                ctrparty_order[6] = ctrparty_qty
+        if account_contract_manager.add_order(price, side, qty):
+            if new_position:
+                self.positions[mpid] = account_contract_manager
+                account.positions[self.contractID] = account_position
 
-            if qty:
-                new_order = [
-                    self._master.eventID,
-                    mpid,
-                    self.contractID,
-                    price,
-                    side,
-                    qty,
-                ]
-                new_order_id = acct_free_orders[-1]
+            order_quantity = self.hit_book(price, 1 - side, qty, mpid)
+            if not order_quantity:
+                return True, "Order fully filled at entry"
 
-    def remove_order(self, order, order_filled=False, ignore_book=False):
-        order_id, order_mpid, order_price, order_side, order_qty = (
-            order[1],
-            order[2],
-            order[4],
-            order[5],
-            order[6],
-        )
-        if not ignore_book:
-            self.book[order_side].remove(order)
+            new_order_ID = self.orders.allocate_order()
+            account_contract_manager.account.orders.add(new_order_ID)
+            self.orderMPID[new_order_ID] = mpid
+            self.orderContract[new_order_ID] = self.contractID
+            self.orderPrice[new_order_ID] = price
+            self.orderSide[new_order_ID] = side
+            self.orderQuantity[new_order_ID] = order_quantity
+            self.append_order(new_order_ID)
+            return True
 
-        order_acct = self.accounts[order_mpid]
-        del order_acct.orders[order_id]
+    def append_order(self):
+        return
 
-        if not order_filled:
-            order_acct.positions[self.contractID].remove_order(
-                order_price, order_side, order_qty
-            )
+    def hit_book(self, price, side, qty, mpid=None, self_trade_prevention=True):
+        self_trade = lambda x: x == mpid if self_trade_prevention else lambda x: False
+        pass

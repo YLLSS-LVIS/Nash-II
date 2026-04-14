@@ -1,3 +1,2 @@
-# Nash-II
-# Formal work on Nash-II has **not** started.
-Nash-II is the planned second iteration of the Nash Event Contracts Exchange  
+# Nash Pro
+# Nash Pro is the current default transaction engine of the Nash event contracts exchange system.

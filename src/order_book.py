@@ -1,7 +1,6 @@
-from sortedcontainers import SortedDict
-
 from contract_manager import contract_manager
 from orders import orders
+from sortedcontainers import SortedDict
 
 
 class order_book:
@@ -17,6 +16,7 @@ class order_book:
 
         self.contractManagers = {
             mpid: contract_manager(
+                _account=account,
                 margin_function=self.margin_function,
                 position=account.positions[self.contractID],
                 balance=account.balance,
@@ -40,8 +40,8 @@ class order_book:
         pass
 
     def post_order(self, mpid, price, side, qty):
-        account_contract_manager = self.positions.get(mpid)
-        new_position = account_position is None
+        account_contract_manager = self.contractManagers.get(mpid)
+        new_position = account_contract_manager is None
         if new_position:
             account = self.accounts.get(mpid)
             if account is None:
@@ -57,7 +57,7 @@ class order_book:
 
         if account_contract_manager.add_order(price, side, qty):
             if new_position:
-                self.positions[mpid] = account_contract_manager
+                self.contractManagers[mpid] = account_contract_manager
                 account.positions[self.contractID] = account_position
 
             order_quantity = self.hit_book(price, 1 - side, qty, mpid)
